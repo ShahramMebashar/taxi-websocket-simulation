@@ -1,0 +1,1240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Driver Simulation - React Client</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin=""/>
+
+    <!-- React and ReactDOM from CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+
+    <!-- Leaflet.Marker.SlideTo for smooth animations -->
+    <script src="https://cdn.jsdelivr.net/npm/leaflet.marker.slideto@0.3.0/Leaflet.Marker.SlideTo.js"></script>
+
+    <!-- Leaflet Rotated Marker -->
+    <script src="https://cdn.jsdelivr.net/npm/leaflet-rotatedmarker@0.2.0/leaflet.rotatedMarker.min.js"></script>
+
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        #root {
+            display: flex;
+            height: 100vh;
+            width: 100%;
+        }
+
+        .app-container {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+
+        .map-container {
+            flex: 1;
+            height: 100%;
+            position: relative;
+            z-index: 1; /* Ensure map is below sidebar in stacking context */
+            overflow: hidden; /* Prevent scrollbars */
+        }
+
+        /* Ensure Leaflet controls work properly */
+        .leaflet-container {
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+
+        /* Fix for map zoom controls */
+        .leaflet-control-zoom {
+            z-index: 1000 !important;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2) !important;
+            border: none !important;
+            margin: 15px !important;
+        }
+
+        .leaflet-control-zoom a {
+            width: 36px !important;
+            height: 36px !important;
+            line-height: 36px !important;
+            font-size: 18px !important;
+            background-color: white !important;
+            color: #333 !important;
+            border: none !important;
+            border-radius: 4px !important;
+            box-shadow: none !important;
+            transition: background-color 0.2s ease !important;
+        }
+
+        .leaflet-control-zoom a:hover {
+            background-color: #f5f5f5 !important;
+            color: #4361ee !important;
+        }
+
+        .leaflet-control-zoom-in {
+            border-bottom: 1px solid #eee !important;
+        }
+
+        /* Fix for map dragging */
+        .leaflet-grab {
+            cursor: grab !important;
+        }
+
+        .leaflet-dragging .leaflet-grab {
+            cursor: grabbing !important;
+        }
+
+        .sidebar {
+            width: 350px;
+            background-color: #fff;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+            z-index: 2; /* Higher z-index than map */
+            display: flex;
+            flex-direction: column;
+            overflow: hidden !important; /* Important: prevent sidebar from scrolling */
+            border-right: 1px solid #e0e0e0;
+            height: 100%;
+            position: relative;
+            flex-shrink: 0; /* Prevent sidebar from shrinking */
+        }
+
+        .sidebar-header {
+            padding: 18px 20px;
+            background-color: #4361ee; /* Modern blue */
+            color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .sidebar-header h1 {
+            margin: 0;
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+        }
+
+        .driver-count {
+            font-size: 15px;
+            margin-top: 6px;
+            opacity: 0.9;
+            font-weight: 400;
+        }
+
+        /* Status summary */
+        .status-summary {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px;
+            background-color: #f5f5f5;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .status-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+        }
+
+        .status-icon {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            margin-bottom: 5px;
+        }
+
+        .status-available .status-icon {
+            background-color: #4CAF50;
+        }
+
+        .status-busy .status-icon {
+            background-color: #FF9800;
+        }
+
+        .status-offline .status-icon {
+            background-color: #9E9E9E;
+        }
+
+        .status-label {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .status-value {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        /* Controls */
+        .controls {
+            padding: 15px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+
+        .control-group select,
+        .control-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .radius-control {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .radius-values {
+            margin-top: 5px;
+            font-size: 14px;
+            color: #666;
+            text-align: center;
+        }
+
+        .primary-button {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            background-color: #4361ee;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(67, 97, 238, 0.3);
+        }
+
+        .primary-button:hover {
+            background-color: #3a56d4;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(67, 97, 238, 0.4);
+        }
+
+        .primary-button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px rgba(67, 97, 238, 0.3);
+        }
+
+        .icon-center {
+            display: inline-block;
+            margin-right: 6px;
+        }
+
+        /* Driver list */
+        .driver-list-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* Important: prevent container from scrolling */
+            min-height: 0; /* Critical for flexbox to allow child to scroll */
+            max-height: calc(100% - 200px); /* Ensure it doesn't overflow the sidebar */
+            position: relative; /* Create stacking context */
+        }
+
+        .driver-list-header {
+            padding: 15px;
+            border-bottom: 1px solid #e0e0e0;
+            background-color: #f9f9f9;
+        }
+
+        .driver-list-header h2 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .driver-filter {
+            display: flex;
+            gap: 10px;
+        }
+
+        .driver-filter select,
+        .driver-filter input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            background-color: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .driver-filter input:focus,
+        .driver-filter select:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+        }
+
+        .driver-list {
+            flex: 1;
+            overflow-y: auto !important; /* Force scrolling */
+            position: relative;
+            min-height: 0; /* Critical for flexbox scrolling */
+            padding-bottom: 20px; /* Add some padding at the bottom */
+            height: 100%; /* Ensure it takes full height */
+            -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+            will-change: transform; /* Hardware acceleration for smoother scrolling */
+            overscroll-behavior: contain; /* Prevent scroll chaining */
+            transform: translateZ(0); /* Force hardware acceleration */
+        }
+
+        /* Ensure the driver list container doesn't interfere with scrolling */
+        .driver-list > div {
+            position: relative;
+            min-height: 100%;
+        }
+
+        /* Custom scrollbar for better UX */
+        .driver-list::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .driver-list::-webkit-scrollbar-track {
+            background: #f5f5f5;
+        }
+
+        .driver-list::-webkit-scrollbar-thumb {
+            background-color: #ccc;
+            border-radius: 4px;
+        }
+
+        .driver-list::-webkit-scrollbar-thumb:hover {
+            background-color: #aaa;
+        }
+
+        .driver-item {
+            display: flex;
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            height: 80px;
+            box-sizing: border-box;
+            transition: all 0.2s ease;
+            align-items: center;
+            position: relative;
+        }
+
+        .driver-item:hover {
+            background-color: rgba(52, 152, 219, 0.05);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        .driver-item.selected {
+            background-color: rgba(52, 152, 219, 0.1);
+            border-left-width: 6px;
+        }
+
+        .driver-status-available {
+            border-left: 4px solid #4CAF50;
+        }
+
+        .driver-status-busy {
+            border-left: 4px solid #FF9800;
+        }
+
+        .driver-status-offline {
+            border-left: 4px solid #9E9E9E;
+        }
+
+        .driver-icon {
+            width: 40px;
+            height: 40px;
+            margin-right: 10px;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+
+        .driver-info {
+            flex: 1;
+        }
+
+        .driver-id {
+            font-weight: bold;
+            margin-bottom: 3px;
+        }
+
+        .driver-status {
+            display: flex;
+            align-items: center;
+            margin-bottom: 3px;
+            font-size: 14px;
+        }
+
+        .driver-status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+
+        .driver-status-available .driver-status-dot {
+            background-color: #4CAF50;
+        }
+
+        .driver-status-busy .driver-status-dot {
+            background-color: #FF9800;
+        }
+
+        .driver-status-offline .driver-status-dot {
+            background-color: #9E9E9E;
+        }
+
+        .driver-details {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #666;
+        }
+
+        /* Marker styles */
+        .driver-available {
+            filter: hue-rotate(120deg) saturate(1.5); /* Green tint */
+        }
+
+        .driver-busy {
+            filter: hue-rotate(30deg) saturate(1.5); /* Orange tint */
+        }
+
+        .driver-offline {
+            filter: grayscale(1); /* Gray */
+        }
+
+        /* Popup styles */
+        .driver-popup {
+            min-width: 200px;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .app-container {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+                height: 50%;
+                overflow: hidden !important;
+                min-height: 400px; /* Ensure minimum height on mobile */
+            }
+
+            .driver-list-container {
+                max-height: none; /* Remove max-height constraint on mobile */
+                height: calc(100% - 200px); /* Adjust based on header heights */
+            }
+
+            .map-container {
+                height: 50%;
+                min-height: 300px; /* Ensure minimum height on mobile */
+            }
+
+            /* Adjust header sizes for mobile */
+            .sidebar-header h1 {
+                font-size: 18px;
+            }
+
+            .driver-count {
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // Car icon definitions
+        const carIcons = {
+            'Available': L.icon({
+                iconUrl: '/car-icon-available.svg',
+                iconSize: [32, 32],
+                iconAnchor: [16, 16],
+                popupAnchor: [0, -16],
+                className: 'driver-available'
+            }),
+            'Busy': L.icon({
+                iconUrl: '/car-icon-busy.svg',
+                iconSize: [32, 32],
+                iconAnchor: [16, 16],
+                popupAnchor: [0, -16],
+                className: 'driver-busy'
+            }),
+            'Offline': L.icon({
+                iconUrl: '/car-icon-offline.svg',
+                iconSize: [32, 32],
+                iconAnchor: [16, 16],
+                popupAnchor: [0, -16],
+                className: 'driver-offline'
+            }),
+            'default': L.icon({
+                iconUrl: '/car-icon.svg',
+                iconSize: [32, 32],
+                iconAnchor: [16, 16],
+                popupAnchor: [0, -16]
+            })
+        };
+
+        // Main App component
+        const App = () => {
+            const mapRef = React.useRef(null);
+            const leafletMapRef = React.useRef(null);
+            const markersRef = React.useRef({});
+            const prevPositionsRef = React.useRef({});
+            const searchCircleRef = React.useRef(null);
+            const socketRef = React.useRef(null);
+            const userActionRef = React.useRef(false); // Track if changes are user-initiated
+
+            const [driverCount, setDriverCount] = React.useState(0);
+            const [connected, setConnected] = React.useState(false);
+            const [drivers, setDrivers] = React.useState([]);
+            const [statusCounts, setStatusCounts] = React.useState({
+                Available: 0,
+                Busy: 0,
+                Offline: 0
+            });
+
+            // Center location (default to Erbil)
+            const [center, setCenter] = React.useState({
+                lat: 36.191113,
+                lon: 44.009167
+            });
+
+            // Search radius
+            const [radius, setRadius] = React.useState(0.15);
+
+            // Get popup content for a driver
+            const getPopupContent = (driver) => {
+                return `
+                    <div class="driver-popup" style="min-width: 220px; padding: 12px;">
+                        <h3 style="margin: 0 0 12px 0; color: #333; border-bottom: 1px solid #eee; padding-bottom: 8px; font-size: 16px; font-weight: 600;">
+                            Taxi #${driver.id}
+                        </h3>
+                        <div style="margin-bottom: 8px; display: flex; align-items: center;">
+                            <strong style="width: 80px; display: inline-block; font-weight: 500;">Status:</strong>
+                            <span style="color:${driver.status === 'Available' ? '#4CAF50' : driver.status === 'Busy' ? '#FF9800' : '#9E9E9E'}; font-weight: 600; display: flex; align-items: center;">
+                                <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: ${driver.status === 'Available' ? '#4CAF50' : driver.status === 'Busy' ? '#FF9800' : '#9E9E9E'}; margin-right: 6px;"></span>
+                                ${driver.status}
+                            </span>
+                        </div>
+                        <div style="margin-bottom: 8px; display: flex;">
+                            <strong style="width: 80px; display: inline-block; font-weight: 500;">Distance:</strong>
+                            <span>${driver.distance !== undefined ? driver.distance.toFixed(2) : 'N/A'} km</span>
+                        </div>
+                        <div style="margin-bottom: 8px; display: flex;">
+                            <strong style="width: 80px; display: inline-block; font-weight: 500;">Heading:</strong>
+                            <span>${driver.heading !== undefined ? driver.heading.toFixed(1) : 'N/A'}° ${getDirectionFromHeading(driver.heading)}</span>
+                        </div>
+                        <div style="margin-bottom: 8px; display: flex;">
+                            <strong style="width: 80px; display: inline-block; font-weight: 500;">Speed:</strong>
+                            <span>${driver.speed !== undefined ? (driver.speed * 111.0 * 3600).toFixed(1) : 'N/A'} km/h</span>
+                        </div>
+                    </div>
+                `;
+            };
+
+            // Helper function to get cardinal direction from heading
+            const getDirectionFromHeading = (heading) => {
+                if (heading === undefined) return '';
+
+                const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+                const index = Math.round(((heading * 180 / Math.PI) % 360) / 45) % 8;
+                return `(${directions[index]})`;
+            };
+
+            // Initialize map when component mounts
+            React.useEffect(() => {
+                if (!leafletMapRef.current) {
+                    // Create Leaflet map with proper zoom controls
+                    leafletMapRef.current = L.map(mapRef.current, {
+                        center: [center.lat, center.lon],
+                        zoom: 12,
+                        zoomControl: false, // We'll add zoom control separately
+                        scrollWheelZoom: true,
+                        doubleClickZoom: true,
+                        dragging: true,
+                        minZoom: 3,
+                        maxZoom: 18,
+                        attributionControl: true,
+                        tap: false // Disable tap handler for better mobile experience
+                    });
+
+                    // Add zoom control to top-right corner
+                    L.control.zoom({
+                        position: 'topright'
+                    }).addTo(leafletMapRef.current);
+
+                    // Add OpenStreetMap tile layer
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                        maxZoom: 19
+                    }).addTo(leafletMapRef.current);
+
+                    // Add search circle
+                    const radiusMeters = radius * 111000; // 111km per degree at equator
+                    searchCircleRef.current = L.circle([center.lat, center.lon], {
+                        color: 'blue',
+                        fillColor: '#30f',
+                        fillOpacity: 0.1,
+                        radius: radiusMeters,
+                        weight: 2
+                    }).addTo(leafletMapRef.current);
+
+                    // Add click handler to update center (with debounce to avoid interfering with zoom)
+                    let clickTimeout = null;
+                    leafletMapRef.current.on('click', (e) => {
+                        // Clear any pending click
+                        if (clickTimeout) clearTimeout(clickTimeout);
+
+                        // Set a small timeout to ensure this is a click, not a zoom operation
+                        clickTimeout = setTimeout(() => {
+                            const newCenter = {
+                                lat: e.latlng.lat,
+                                lon: e.latlng.lng
+                            };
+
+                            // Mark this as a user action
+                            userActionRef.current = true;
+
+                            // Update center state
+                            setCenter(newCenter);
+
+                            // Update search circle directly (don't wait for effect)
+                            if (searchCircleRef.current) {
+                                searchCircleRef.current.setLatLng([newCenter.lat, newCenter.lon]);
+                            }
+
+                            // Send updated parameters to server
+                            if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+                                const params = {
+                                    type: 'client_params',
+                                    lat: newCenter.lat,
+                                    lon: newCenter.lon,
+                                    radius: radius,
+                                    city: ''
+                                };
+                                socketRef.current.send(JSON.stringify(params));
+                            }
+                        }, 50); // Small delay to avoid interfering with double-click zoom
+                    });
+
+                    // Add handler to prevent zoom issues
+                    leafletMapRef.current.on('zoom', () => {
+                        // Clear any pending click when zooming
+                        if (clickTimeout) {
+                            clearTimeout(clickTimeout);
+                            clickTimeout = null;
+                        }
+                    });
+
+                    // Connect to WebSocket
+                    connectWebSocket();
+                }
+
+                // Cleanup on unmount
+                return () => {
+                    if (leafletMapRef.current) {
+                        leafletMapRef.current.remove();
+                        leafletMapRef.current = null;
+                    }
+
+                    if (socketRef.current) {
+                        socketRef.current.close();
+                        socketRef.current = null;
+                    }
+                };
+            }, []);
+
+            // Update markers when drivers change
+            React.useEffect(() => {
+                if (!leafletMapRef.current) return;
+
+                // Track existing markers to remove stale ones
+                const existingMarkers = new Set(Object.keys(markersRef.current));
+
+                // Reset status counts
+                const counts = {
+                    Available: 0,
+                    Busy: 0,
+                    Offline: 0
+                };
+
+                // Process drivers in batches for better performance
+                const batchSize = 50;
+                let currentBatch = 0;
+
+                function processBatch() {
+                    const start = currentBatch * batchSize;
+                    const end = Math.min(start + batchSize, drivers.length);
+
+                    // Process this batch
+                    for (let i = start; i < end; i++) {
+                        const driver = drivers[i];
+                        const markerId = `driver-${driver.id}`;
+                        existingMarkers.delete(markerId);
+
+                        // Update status counts
+                        if (driver.status in counts) {
+                            counts[driver.status]++;
+                        }
+
+                        // Update or create marker
+                        if (markersRef.current[markerId]) {
+                            // Get previous position
+                            const prev = prevPositionsRef.current[markerId] || { lat: driver.lat, lon: driver.lon };
+
+                            // Apply rotation
+                            markersRef.current[markerId].setRotationAngle(driver.heading);
+
+                            // Calculate distance for animation
+                            const distance = Math.sqrt(
+                                Math.pow(driver.lat - prev.lat, 2) +
+                                Math.pow(driver.lon - prev.lon, 2)
+                            );
+
+                            // Skip animation for tiny movements
+                            if (distance < 0.00001) {
+                                markersRef.current[markerId].setLatLng([driver.lat, driver.lon]);
+                            } else {
+                                // Smooth animation
+                                markersRef.current[markerId].slideTo([driver.lat, driver.lon], {
+                                    duration: 220, // Match server update rate
+                                    keepAtCenter: false,
+                                    easing: 'easeInOutCubic'
+                                });
+                            }
+
+                            // Update popup content
+                            if (markersRef.current[markerId].getPopup()) {
+                                markersRef.current[markerId].getPopup().setContent(getPopupContent(driver));
+                            }
+
+                            // Update icon if status changed
+                            const currentIcon = markersRef.current[markerId].options.icon;
+                            const newIcon = carIcons[driver.status] || carIcons['default'];
+
+                            if (currentIcon.options.iconUrl !== newIcon.options.iconUrl) {
+                                markersRef.current[markerId].setIcon(newIcon);
+                            }
+                        } else {
+                            // Create new marker
+                            const icon = carIcons[driver.status] || carIcons['default'];
+
+                            const marker = L.marker([driver.lat, driver.lon], {
+                                icon: icon,
+                                rotationAngle: driver.heading || 0,
+                                rotationOrigin: 'center center'
+                            }).addTo(leafletMapRef.current);
+
+                            // Add popup
+                            marker.bindPopup(getPopupContent(driver), {
+                                offset: [0, -16],
+                                closeButton: true,
+                                autoClose: false
+                            });
+
+                            // Store marker
+                            markersRef.current[markerId] = marker;
+                        }
+
+                        // Store current position for next update
+                        prevPositionsRef.current[markerId] = { lat: driver.lat, lon: driver.lon };
+                    }
+
+                    currentBatch++;
+
+                    // If there are more batches to process, schedule the next one
+                    if (start < drivers.length) {
+                        setTimeout(processBatch, 10); // Process next batch after a short delay
+                    } else {
+                        // All batches processed, now remove stale markers
+                        existingMarkers.forEach(markerId => {
+                            if (markersRef.current[markerId]) {
+                                leafletMapRef.current.removeLayer(markersRef.current[markerId]);
+                                delete markersRef.current[markerId];
+                                delete prevPositionsRef.current[markerId];
+                            }
+                        });
+
+                        // Update status counts
+                        setStatusCounts(counts);
+                    }
+                }
+
+                // Start processing batches
+                processBatch();
+            }, [drivers]);
+
+            // Update search circle when center or radius changes
+            React.useEffect(() => {
+                if (!searchCircleRef.current || !leafletMapRef.current) return;
+
+                // Store current zoom level to avoid unnecessary view changes
+                const currentZoom = leafletMapRef.current.getZoom();
+
+                // Update circle position
+                searchCircleRef.current.setLatLng([center.lat, center.lon]);
+
+                // Update circle radius
+                const radiusMeters = radius * 111000; // 111km per degree at equator
+                searchCircleRef.current.setRadius(radiusMeters);
+
+                // Only set the view if this is from a user action (not from WebSocket updates)
+                // We'll use a ref to track if this is a user-initiated change
+                if (userActionRef.current) {
+                    // Calculate appropriate zoom level based on radius
+                    let zoomLevel = 12;
+                    if (radius <= 0.02) zoomLevel = 14;
+                    else if (radius <= 0.05) zoomLevel = 13;
+                    else if (radius <= 0.1) zoomLevel = 12;
+                    else if (radius <= 0.2) zoomLevel = 11;
+                    else zoomLevel = 10;
+
+                    // Only change zoom if it's different from current zoom
+                    if (zoomLevel !== currentZoom) {
+                        leafletMapRef.current.setView([center.lat, center.lon], zoomLevel, {
+                            animate: true,
+                            duration: 0.5
+                        });
+                    } else {
+                        // Just pan to the new center without changing zoom
+                        leafletMapRef.current.panTo([center.lat, center.lon], {
+                            animate: true,
+                            duration: 0.5
+                        });
+                    }
+
+                    // Reset the user action flag
+                    userActionRef.current = false;
+                }
+            }, [center, radius]);
+
+            // WebSocket connection
+            const connectWebSocket = () => {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}/ws`;
+
+                socketRef.current = new WebSocket(wsUrl);
+
+                socketRef.current.addEventListener('open', () => {
+                    console.log('WebSocket connected');
+                    setConnected(true);
+
+                    // Send initial parameters
+                    const params = {
+                        type: 'client_params',
+                        lat: center.lat,
+                        lon: center.lon,
+                        radius: radius,
+                        city: 'Erbil'
+                    };
+
+                    socketRef.current.send(JSON.stringify(params));
+                });
+
+                socketRef.current.addEventListener('message', (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'drivers_update') {
+                            // Always update driver data
+                            setDriverCount(data.count);
+                            setDrivers(data.drivers || []);
+
+                            // Only update center and radius if they're different from current values
+                            // and if this is not a user-initiated action
+                            if (data.center && !userActionRef.current) {
+                                const newCenter = {
+                                    lat: data.center.lat,
+                                    lon: data.center.lon
+                                };
+
+                                // Only update if different
+                                if (newCenter.lat !== center.lat || newCenter.lon !== center.lon) {
+                                    setCenter(newCenter);
+                                }
+                            }
+
+                            if (data.radius && !userActionRef.current) {
+                                // Only update if different
+                                if (data.radius !== radius) {
+                                    setRadius(data.radius);
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error processing WebSocket message:', error);
+                    }
+                });
+
+                socketRef.current.addEventListener('close', () => {
+                    console.log('WebSocket disconnected');
+                    setConnected(false);
+                    // Reconnect after a delay
+                    setTimeout(connectWebSocket, 2000);
+                });
+
+                socketRef.current.addEventListener('error', (error) => {
+                    console.error('WebSocket error:', error);
+                });
+            };
+
+            // Handle radius change
+            const handleRadiusChange = (e) => {
+                const sliderValue = parseInt(e.target.value);
+                const newRadius = sliderValue / 100; // Convert slider value to degrees
+
+                // Mark this as a user action
+                userActionRef.current = true;
+
+                // Update radius state
+                setRadius(newRadius);
+
+                // Update circle radius directly (don't wait for effect)
+                if (searchCircleRef.current) {
+                    const radiusMeters = newRadius * 111000; // 111km per degree at equator
+                    searchCircleRef.current.setRadius(radiusMeters);
+                }
+
+                // Send updated parameters to server
+                if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+                    const params = {
+                        type: 'client_params',
+                        lat: center.lat,
+                        lon: center.lon,
+                        radius: newRadius,
+                        city: ''
+                    };
+                    socketRef.current.send(JSON.stringify(params));
+                }
+            };
+
+            // Handle city selection
+            const handleCityChange = (e) => {
+                const city = e.target.value;
+
+                // Mark this as a user action
+                userActionRef.current = true;
+
+                // Send updated parameters to server
+                if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+                    const params = {
+                        type: 'client_params',
+                        lat: 0, // Server will resolve city to coordinates
+                        lon: 0,
+                        radius: radius,
+                        city: city
+                    };
+                    socketRef.current.send(JSON.stringify(params));
+                }
+            };
+
+            // State for driver filtering
+            const [statusFilter, setStatusFilter] = React.useState('all');
+            const [searchQuery, setSearchQuery] = React.useState('');
+
+            // Filter drivers based on status and search query
+            const filteredDrivers = React.useMemo(() => {
+                return drivers.filter(driver => {
+                    // Filter by status
+                    if (statusFilter !== 'all' && driver.status !== statusFilter) {
+                        return false;
+                    }
+
+                    // Filter by search query (driver ID)
+                    if (searchQuery && !`Taxi #${driver.id}`.toLowerCase().includes(searchQuery.toLowerCase())) {
+                        return false;
+                    }
+
+                    return true;
+                });
+            }, [drivers, statusFilter, searchQuery]);
+
+            // Virtual list for driver items (only render visible items)
+            const DriverList = ({ drivers }) => {
+                const listRef = React.useRef(null);
+                const scrollPositionRef = React.useRef(0); // Store scroll position
+                const [visibleRange, setVisibleRange] = React.useState({ start: 0, end: 50 });
+                const [selectedDriver, setSelectedDriver] = React.useState(null);
+
+                // Update visible range when scrolling
+                React.useEffect(() => {
+                    if (!listRef.current) return;
+
+                    const handleScroll = () => {
+                        // Save current scroll position
+                        scrollPositionRef.current = listRef.current.scrollTop;
+
+                        const scrollTop = listRef.current.scrollTop;
+                        const itemHeight = 80; // Approximate height of each driver item
+                        const visibleItems = Math.ceil(listRef.current.clientHeight / itemHeight);
+
+                        const start = Math.floor(scrollTop / itemHeight);
+                        const end = start + visibleItems + 15; // Add larger buffer for smoother scrolling
+
+                        setVisibleRange({ start, end });
+                    };
+
+                    // Add scroll event listener
+                    const listElement = listRef.current;
+                    listElement.addEventListener('scroll', handleScroll);
+
+                    // Initial calculation
+                    handleScroll();
+
+                    return () => {
+                        if (listElement) {
+                            listElement.removeEventListener('scroll', handleScroll);
+                        }
+                    };
+                }, []);
+
+                // Restore scroll position after re-render
+                React.useEffect(() => {
+                    if (listRef.current && scrollPositionRef.current > 0) {
+                        listRef.current.scrollTop = scrollPositionRef.current;
+                    }
+                });
+
+                // Calculate total height for scrollbar
+                const totalHeight = drivers.length * 80;
+
+                // Get visible drivers (with safety bounds)
+                const visibleDrivers = React.useMemo(() => {
+                    return drivers.slice(
+                        Math.max(0, visibleRange.start),
+                        Math.min(drivers.length, visibleRange.end)
+                    );
+                }, [drivers, visibleRange.start, visibleRange.end]);
+
+                // Show message if no drivers match filters
+                if (drivers.length === 0) {
+                    return (
+                        <div className="driver-list" ref={listRef}>
+                            <div className="no-drivers-message" style={{ padding: '40px 20px', textAlign: 'center', color: '#666' }}>
+                                No drivers match your filters
+                            </div>
+                        </div>
+                    );
+                }
+
+                // Handle driver selection
+                const handleDriverClick = (driver) => {
+                    setSelectedDriver(driver.id);
+
+                    // Mark as user action
+                    userActionRef.current = true;
+
+                    // Center map on driver
+                    if (leafletMapRef.current) {
+                        leafletMapRef.current.setView([driver.lat, driver.lon], 15);
+                    }
+
+                    // Open popup
+                    const markerId = `driver-${driver.id}`;
+                    if (markersRef.current[markerId]) {
+                        markersRef.current[markerId].openPopup();
+                    }
+                };
+
+                // Calculate position for each driver item
+                const getDriverPosition = (index) => {
+                    const driverIndex = visibleRange.start + index;
+                    return driverIndex * 80;
+                };
+
+                return (
+                    <div className="driver-list" ref={listRef}>
+                        <div style={{ height: totalHeight + 'px', position: 'relative' }}>
+                            {visibleDrivers.map((driver, index) => (
+                                <div
+                                    key={driver.id}
+                                    className={`driver-item driver-status-${driver.status.toLowerCase()} ${selectedDriver === driver.id ? 'selected' : ''}`}
+                                    style={{
+                                        position: 'absolute',
+                                        top: getDriverPosition(index) + 'px',
+                                        left: 0,
+                                        right: 0
+                                    }}
+                                    onClick={() => handleDriverClick(driver)}
+                                >
+                                    <div className="driver-icon" style={{ backgroundImage: `url('/car-icon-${driver.status.toLowerCase()}.svg')` }}></div>
+                                    <div className="driver-info">
+                                        <div className="driver-id">Taxi #{driver.id}</div>
+                                        <div className="driver-status">
+                                            <span className="driver-status-dot"></span>
+                                            {driver.status}
+                                        </div>
+                                        <div className="driver-details">
+                                            <span className="driver-speed">{(driver.speed * 111.0 * 3600).toFixed(1)} km/h</span>
+                                            <span className="driver-distance">{driver.distance.toFixed(1)} km</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                );
+            };
+
+            return (
+                <div className="app-container">
+                    <div className="sidebar">
+                        <div className="sidebar-header">
+                            <h1>Driver Simulation</h1>
+                            <div className="driver-count">
+                                {connected ? `${driverCount} Drivers Nearby` : 'Connecting...'}
+                            </div>
+                        </div>
+
+                        {/* Status summary */}
+                        <div className="status-summary">
+                            <div className="status-item status-available">
+                                <div className="status-icon"></div>
+                                <div className="status-label">Available</div>
+                                <div className="status-value">{statusCounts.Available}</div>
+                            </div>
+                            <div className="status-item status-busy">
+                                <div className="status-icon"></div>
+                                <div className="status-label">Busy</div>
+                                <div className="status-value">{statusCounts.Busy}</div>
+                            </div>
+                            <div className="status-item status-offline">
+                                <div className="status-icon"></div>
+                                <div className="status-label">Offline</div>
+                                <div className="status-value">{statusCounts.Offline}</div>
+                            </div>
+                        </div>
+
+                        {/* Controls */}
+                        <div className="controls">
+                            <div className="control-group">
+                                <label htmlFor="city">City</label>
+                                <select id="city" onChange={handleCityChange} defaultValue="Erbil">
+                                    <option value="Erbil">Erbil</option>
+                                    <option value="Duhok">Duhok</option>
+                                </select>
+                            </div>
+
+                            <div className="control-group">
+                                <label htmlFor="radius-slider">Search Radius</label>
+                                <div className="radius-control">
+                                    <input
+                                        type="range"
+                                        id="radius-slider"
+                                        min="1"
+                                        max="30"
+                                        step="1"
+                                        value={Math.round(radius * 100)}
+                                        onChange={handleRadiusChange}
+                                    />
+                                    <div className="radius-values">
+                                        <span>{radius.toFixed(2)}° (≈ {(radius * 111.0).toFixed(1)} km)</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button
+                                className="primary-button"
+                                onClick={() => {
+                                    if (leafletMapRef.current) {
+                                        // Mark this as a user action
+                                        userActionRef.current = true;
+
+                                        // Calculate appropriate zoom level based on radius
+                                        let zoomLevel = 12;
+                                        if (radius <= 0.02) zoomLevel = 14;
+                                        else if (radius <= 0.05) zoomLevel = 13;
+                                        else if (radius <= 0.1) zoomLevel = 12;
+                                        else if (radius <= 0.2) zoomLevel = 11;
+                                        else zoomLevel = 10;
+
+                                        // Set view with animation
+                                        leafletMapRef.current.setView([center.lat, center.lon], zoomLevel, {
+                                            animate: true,
+                                            duration: 0.5
+                                        });
+                                    }
+                                }}
+                            >
+                                <span className="icon-center"></span> Center Map
+                            </button>
+                        </div>
+
+                        {/* Driver list */}
+                        <div className="driver-list-container">
+                            <div className="driver-list-header">
+                                <h2>Nearby Drivers</h2>
+                                <div className="driver-filter">
+                                    <select
+                                        id="status-filter"
+                                        value={statusFilter}
+                                        onChange={(e) => setStatusFilter(e.target.value)}
+                                    >
+                                        <option value="all">All Statuses</option>
+                                        <option value="Available">Available</option>
+                                        <option value="Busy">Busy</option>
+                                        <option value="Offline">Offline</option>
+                                    </select>
+                                    <input
+                                        type="text"
+                                        id="driver-search"
+                                        placeholder="Search by ID..."
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Virtualized driver list for better performance */}
+                            <DriverList drivers={filteredDrivers} />
+                        </div>
+                    </div>
+                    <div
+                        className="map-container"
+                        ref={mapRef}
+                        onWheel={(e) => e.stopPropagation()} // Prevent wheel events from propagating
+                    ></div>
+                </div>
+            );
+        };
+
+        // Render the App
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
