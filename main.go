@@ -24,11 +24,11 @@ const (
 	maxLon, maxLat = 44.5, 37.5 // Northeast corner
 
 	// Simulation parameters
-	numDrivers        = 200                    // Increased to 200 drivers
-	searchRadius      = 0.05                   // degrees (approximately 5km at equator)
+	numDrivers        = 1000                   // 1,000 drivers
+	searchRadius      = 0.15                   // degrees (approximately 16.5km at equator)
 	maxSpeed          = 0.0001                 // degrees per second (about 11m/s or 40km/h) - increased for visibility
 	minSpeed          = 0.00005                // minimum speed (about 5.5m/s or 20km/h) - increased for visibility
-	updateInterval    = 200 * time.Millisecond // More frequent updates for smoother movement
+	updateInterval    = 220 * time.Millisecond // Reduced update frequency by 10% (from 200ms to 220ms)
 	statsInterval     = 5 * time.Second
 	queryInterval     = 2 * time.Second
 	driverStatusProbs = 0.7 // 70% available, 30% will be busy or offline
@@ -475,7 +475,7 @@ func (s *Simulation) Run() {
 	statsTicker := time.NewTicker(statsInterval)
 	queryTicker := time.NewTicker(queryInterval)
 	rebuildTicker := time.NewTicker(1 * time.Second)          // More frequent rebuilds for accurate quadtree
-	broadcastTicker := time.NewTicker(200 * time.Millisecond) // Broadcast driver updates every 200ms
+	broadcastTicker := time.NewTicker(220 * time.Millisecond) // Broadcast driver updates every 220ms (reduced by 10%)
 
 	fmt.Println("Starting driver simulation with", numDrivers, "drivers")
 	fmt.Println("Press Ctrl+C to stop the simulation")

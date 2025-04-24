@@ -1138,15 +1138,15 @@
                         // Calculate animation duration based on smoothed speed
                         // Faster cars = shorter animation duration
                         // Speed is in degrees per second, we want duration in milliseconds
-                        let duration = 200; // default for WebSocket
+                        let duration = 220; // default for WebSocket (increased by 10% from 200ms to 220ms)
 
                         if (avgSpeed > 0) {
                             // Calculate real-world duration in ms
                             const realDuration = (distance / avgSpeed) * 1000;
 
-                            // Clamp between 150ms and 300ms for smoother animation
+                            // Clamp between 165ms and 330ms for smoother animation (increased by 10%)
                             // Longer durations create smoother movement
-                            duration = Math.min(300, Math.max(150, realDuration));
+                            duration = Math.min(330, Math.max(165, realDuration));
                         }
 
                         // Choose easing based on speed change

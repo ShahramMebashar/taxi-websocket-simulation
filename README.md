@@ -1,14 +1,14 @@
 # Driver Simulation and Visualization
 
-A real-time driver simulation and visualization system using Go for the backend and JavaScript/Leaflet for the frontend. The system simulates taxi drivers in Erbil and Duhok cities with different statuses (Available, Busy, Offline) and provides a web-based visualization.
+A real-time driver simulation and visualization system using Go for the backend and JavaScript/Leaflet for the frontend. The system simulates 1,000 taxi drivers in Erbil and Duhok cities with different statuses (Available, Busy, Offline) and provides a web-based visualization.
 
 ![Driver Simulation Screenshot](screenshot.png)
 
-*Screenshot: Driver simulation showing 200 drivers with different statuses on the map and in the sidebar list.*
+*Screenshot: Driver simulation showing drivers with different statuses on the map and in the sidebar list.*
 
 ## Features
 
-- **Real-time Driver Simulation**: Simulates 200 drivers with realistic movement patterns
+- **Real-time Driver Simulation**: Simulates 1,000 drivers with realistic movement patterns
 - **WebSocket Communication**: Provides real-time updates to connected clients
 - **Interactive Map Visualization**: Uses Leaflet.js with OpenStreetMap for visualization
 - **Spatial Indexing**: Uses Quadtree for efficient spatial queries
@@ -56,7 +56,7 @@ The client and server communicate using a simple JSON protocol:
   "type": "client_params",
   "lat": 36.191113,
   "lon": 44.009167,
-  "radius": 0.05,
+  "radius": 0.15,
   "city": "Erbil"
 }
 
@@ -75,12 +75,12 @@ The client and server communicate using a simple JSON protocol:
     },
     // More drivers...
   ],
-  "count": 200,
+  "count": 1000,
   "center": {
     "lat": 36.191113,
     "lon": 44.009167
   },
-  "radius": 0.05,
+  "radius": 0.15,
   "time": 1619712345678
 }
 ```
