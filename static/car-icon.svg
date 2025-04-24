@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="32px" height="32px" viewBox="0 0 32 32" version="1.1" xmlns="http://www.w3.org/2000/svg">
+    <!-- Enhanced top-down taxi view with better perspective -->
+    <g stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <!-- Shadow for depth -->
+        <ellipse cx="16" cy="18" rx="13" ry="10" fill="#00000033" />
+
+        <!-- Car body (yellow taxi) with rounded corners -->
+        <path d="M8,8 L8,24 C8,25.1 8.9,26 10,26 L22,26 C23.1,26 24,25.1 24,24 L24,8 C24,6.9 23.1,6 22,6 L10,6 C8.9,6 8,6.9 8,8 Z"
+              fill="#FFDE00" stroke="#000000" stroke-width="0.7"/>
+
+        <!-- Hood and trunk with subtle gradient -->
+        <path d="M8,8 L8,12 L24,12 L24,8 C24,6.9 23.1,6 22,6 L10,6 C8.9,6 8,6.9 8,8 Z"
+              fill="#FFE94D" stroke="#000000" stroke-width="0.3"/>
+        <path d="M8,20 L8,24 C8,25.1 8.9,26 10,26 L22,26 C23.1,26 24,25.1 24,24 L24,20 L8,20 Z"
+              fill="#E6C800" stroke="#000000" stroke-width="0.3"/>
+
+        <!-- Windows with reflection -->
+        <path d="M9,12 L9,20 L23,20 L23,12 L9,12 Z" fill="#333333" stroke="#000000" stroke-width="0.3"/>
+        <path d="M10,13 L22,13 L22,19 L10,19 Z" fill="#87CEFA" fill-opacity="0.7"/>
+        <path d="M10,13 L22,13 L21,14 L11,14 Z" fill="#FFFFFF" fill-opacity="0.6"/>
+
+        <!-- Roof sign -->
+        <rect x="12" y="14" width="8" height="4" rx="1" fill="#FFFFFF" stroke="#000000" stroke-width="0.5"/>
+        <text x="16" y="17" font-family="Arial" font-size="3" fill="#000000" text-anchor="middle" dominant-baseline="middle">TAXI</text>
+
+        <!-- Wheels with perspective -->
+        <ellipse cx="10" cy="8" rx="1.5" ry="1" fill="#333333" stroke="#000000" stroke-width="0.5"/>
+        <ellipse cx="10" cy="24" rx="1.5" ry="1" fill="#333333" stroke="#000000" stroke-width="0.5"/>
+        <ellipse cx="22" cy="8" rx="1.5" ry="1" fill="#333333" stroke="#000000" stroke-width="0.5"/>
+        <ellipse cx="22" cy="24" rx="1.5" ry="1" fill="#333333" stroke="#000000" stroke-width="0.5"/>
+
+        <!-- Headlights -->
+        <circle cx="10" cy="7" r="0.8" fill="#FFFFFF" stroke="#000000" stroke-width="0.2"/>
+        <circle cx="22" cy="7" r="0.8" fill="#FFFFFF" stroke="#000000" stroke-width="0.2"/>
+
+        <!-- Taillights -->
+        <circle cx="10" cy="25" r="0.8" fill="#FF3333" stroke="#000000" stroke-width="0.2"/>
+        <circle cx="22" cy="25" r="0.8" fill="#FF3333" stroke="#000000" stroke-width="0.2"/>
+
+        <!-- Taxi checkerboard pattern on sides -->
+        <rect x="9" y="15" width="1" height="1" fill="#000000"/>
+        <rect x="10" y="15" width="1" height="1" fill="#FFDE00"/>
+        <rect x="9" y="16" width="1" height="1" fill="#FFDE00"/>
+        <rect x="10" y="16" width="1" height="1" fill="#000000"/>
+
+        <rect x="21" y="15" width="1" height="1" fill="#000000"/>
+        <rect x="22" y="15" width="1" height="1" fill="#FFDE00"/>
+        <rect x="21" y="16" width="1" height="1" fill="#FFDE00"/>
+        <rect x="22" y="16" width="1" height="1" fill="#000000"/>
+    </g>
+</svg>

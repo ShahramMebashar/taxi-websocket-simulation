@@ -1,0 +1,1659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Driver Simulation Map</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin=""/>
+
+    <!-- Leaflet Marker Rotation and Status CSS -->
+    <style>
+        .leaflet-marker-icon {
+            transition: transform 0.3s ease-out, filter 0.3s ease;
+        }
+
+        /* Status-based styling */
+        .driver-available {
+            filter: hue-rotate(120deg) saturate(1.5); /* Green tint */
+        }
+
+        .driver-busy {
+            filter: hue-rotate(30deg) saturate(1.5); /* Orange tint */
+        }
+
+        /* Taxi icon styling */
+        .taxi-icon {
+            filter: drop-shadow(0 0 1px rgba(0,0,0,0.5));
+            /* Remove transition to prevent jumping */
+            /* Ensure icons are above other elements but don't use !important */
+            z-index: 600;
+            /* Make sure pointer events work */
+            pointer-events: auto;
+        }
+
+        /* Remove hover effect that causes jumping */
+        /* Instead, we'll use a subtle filter change that doesn't affect positioning */
+        .taxi-icon:hover {
+            filter: drop-shadow(0 0 3px rgba(0,0,0,0.7));
+        }
+
+        /* Available taxi styling */
+        .driver-available.taxi-icon {
+            filter: drop-shadow(0 0 2px rgba(76, 175, 80, 0.7));
+        }
+
+        /* Disable pointer events on circle */
+        .no-pointer-events {
+            pointer-events: none !important;
+        }
+
+        /* Fix for map dragging issues */
+        .leaflet-grab {
+            cursor: grab;
+        }
+
+        .leaflet-dragging .leaflet-grab {
+            cursor: grabbing;
+        }
+
+        /* Driver popup styling */
+        .driver-popup .leaflet-popup-content-wrapper {
+            border-radius: 8px;
+            box-shadow: 0 3px 14px rgba(0,0,0,0.2);
+        }
+
+        .driver-popup .leaflet-popup-tip {
+            box-shadow: 0 3px 14px rgba(0,0,0,0.2);
+        }
+
+        .driver-popup .leaflet-popup-content {
+            margin: 8px;
+        }
+    </style>
+
+    <style>
+        /* Base styles */
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #333;
+            background-color: #f5f5f5;
+        }
+
+        /* Layout */
+        .app-container {
+            display: flex;
+            height: 100vh;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 380px;
+            height: 100%;
+            background-color: #fff;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            z-index: 1000;
+            transition: transform 0.3s ease;
+        }
+
+        .sidebar-header {
+            padding: 15px;
+            background-color: #2c3e50;
+            color: white;
+        }
+
+        .sidebar-header h1 {
+            margin: 0 0 10px 0;
+            font-size: 24px;
+            font-weight: 500;
+        }
+
+        .driver-count {
+            font-size: 16px;
+            font-weight: 500;
+            color: #ecf0f1;
+        }
+
+        /* Status summary */
+        .status-summary {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .status-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+        }
+
+        .status-icon {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            margin-bottom: 5px;
+        }
+
+        .status-available .status-icon {
+            background-color: #4CAF50;
+        }
+
+        .status-busy .status-icon {
+            background-color: #FF9800;
+        }
+
+        .status-offline .status-icon {
+            background-color: #9E9E9E;
+        }
+
+        .status-label {
+            font-size: 12px;
+            color: #6c757d;
+        }
+
+        .status-value {
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .status-available .status-value {
+            color: #4CAF50;
+        }
+
+        .status-busy .status-value {
+            color: #FF9800;
+        }
+
+        .status-offline .status-value {
+            color: #9E9E9E;
+        }
+
+        /* Controls */
+        .controls {
+            padding: 15px;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #495057;
+        }
+
+        .control-group select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            background-color: white;
+            font-size: 14px;
+        }
+
+        .radius-control {
+            margin-top: 5px;
+        }
+
+        .radius-control input {
+            width: 100%;
+            margin-bottom: 5px;
+        }
+
+        .radius-values {
+            font-size: 12px;
+            color: #6c757d;
+            text-align: center;
+        }
+
+        .primary-button {
+            width: 100%;
+            padding: 10px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: background-color 0.2s;
+        }
+
+        .primary-button:hover {
+            background-color: #2980b9;
+        }
+
+        .icon-center::before {
+            content: "⊕";
+            margin-right: 5px;
+        }
+
+        /* Driver list */
+        .driver-list-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background-color: #f9f9f9;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .driver-list-header {
+            padding: 18px 20px;
+            background-color: #fff;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .driver-list-header h2 {
+            margin: 0 0 15px 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: #2c3e50;
+            display: flex;
+            align-items: center;
+        }
+
+        .driver-list-header h2::before {
+            content: "🚕";
+            margin-right: 8px;
+            font-size: 20px;
+        }
+
+        .driver-filter {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 5px;
+        }
+
+        .driver-filter select {
+            flex: 1;
+            padding: 10px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            background-color: white;
+            font-size: 14px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            transition: all 0.2s;
+        }
+
+        .driver-filter select:focus {
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+            outline: none;
+        }
+
+        .driver-filter input {
+            flex: 2;
+            padding: 10px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            font-size: 14px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            transition: all 0.2s;
+        }
+
+        .driver-filter input:focus {
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+            outline: none;
+        }
+
+        .driver-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            scrollbar-width: thin;
+            scrollbar-color: #cbd5e0 #f8fafc;
+        }
+
+        .driver-list::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .driver-list::-webkit-scrollbar-track {
+            background: #f8fafc;
+        }
+
+        .driver-list::-webkit-scrollbar-thumb {
+            background-color: #cbd5e0;
+            border-radius: 4px;
+        }
+
+        .driver-item {
+            padding: 14px 16px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            border-left: 4px solid transparent;
+        }
+
+        .driver-item:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+
+        .driver-item.selected {
+            background-color: #e3f2fd;
+            border-left: 4px solid #3498db;
+        }
+
+        .driver-status-available {
+            border-left-color: #4CAF50;
+        }
+
+        .driver-status-busy {
+            border-left-color: #FF9800;
+        }
+
+        .driver-status-offline {
+            border-left-color: #9E9E9E;
+        }
+
+        .driver-icon {
+            width: 32px;
+            height: 32px;
+            margin-right: 14px;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            filter: drop-shadow(0 2px 2px rgba(0,0,0,0.1));
+        }
+
+        .driver-info {
+            flex: 1;
+        }
+
+        .driver-id {
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: #2c3e50;
+            font-size: 15px;
+        }
+
+        .driver-status {
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .driver-status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 6px;
+            position: relative;
+        }
+
+        .driver-status-available .driver-status-dot {
+            background-color: #4CAF50;
+            box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+        }
+
+        .driver-status-busy .driver-status-dot {
+            background-color: #FF9800;
+            box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.2);
+        }
+
+        .driver-status-offline .driver-status-dot {
+            background-color: #9E9E9E;
+            box-shadow: 0 0 0 2px rgba(158, 158, 158, 0.2);
+        }
+
+        .driver-status-available .driver-status-dot::after,
+        .driver-status-busy .driver-status-dot::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+            opacity: 0;
+        }
+
+        .driver-status-available .driver-status-dot::after {
+            background-color: #4CAF50;
+        }
+
+        .driver-status-busy .driver-status-dot::after {
+            background-color: #FF9800;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.7; }
+            70% { transform: scale(2); opacity: 0; }
+            100% { transform: scale(1); opacity: 0; }
+        }
+
+        .driver-details {
+            font-size: 13px;
+            color: #6c757d;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .driver-details span {
+            display: flex;
+            align-items: center;
+        }
+
+        .driver-details span::before {
+            margin-right: 4px;
+            font-size: 12px;
+        }
+
+        .driver-speed::before {
+            content: "🏁";
+        }
+
+        .driver-direction::before {
+            content: "🧭";
+        }
+
+        .driver-distance::before {
+            content: "📍";
+        }
+
+        /* Map container */
+        .map-container {
+            flex: 1;
+            position: relative;
+            height: 100%;
+        }
+
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+
+        .map-controls {
+            position: absolute;
+            top: 80px;
+            left: 10px;
+            z-index: 1000;
+        }
+
+        .icon-button {
+            width: 44px;
+            height: 44px;
+            background-color: white;
+            border: none;
+            border-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 22px;
+            transition: all 0.2s ease;
+        }
+
+        .icon-button:hover {
+            background-color: #f8f9fa;
+            transform: scale(1.05);
+        }
+
+        .icon-button:active {
+            transform: scale(0.95);
+        }
+
+        .icon-menu::before {
+            content: "☰";
+        }
+
+        /* Position Leaflet zoom controls to avoid overlap */
+        .leaflet-top.leaflet-left {
+            top: 130px;
+        }
+
+        /* Highlight effect for markers */
+        .highlight-marker {
+            animation: pulse 1.5s ease-in-out;
+            z-index: 1001 !important;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1) rotate(var(--rotation, 0deg)); filter: brightness(1); }
+            50% { transform: scale(1.3) rotate(var(--rotation, 0deg)); filter: brightness(1.5); }
+            100% { transform: scale(1) rotate(var(--rotation, 0deg)); filter: brightness(1); }
+        }
+
+        /* No drivers message */
+        .no-drivers-message {
+            padding: 20px;
+            text-align: center;
+            color: #6c757d;
+            font-style: italic;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .sidebar {
+                position: absolute;
+                transform: translateX(-100%);
+            }
+
+            .sidebar.open {
+                transform: translateX(0);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h1>Taxi Simulator</h1>
+                <div class="driver-count">Loading drivers...</div>
+            </div>
+
+            <div class="status-summary">
+                <div class="status-item status-available">
+                    <div class="status-icon"></div>
+                    <div class="status-label">Available</div>
+                    <div class="status-value" id="available-count">0</div>
+                </div>
+                <div class="status-item status-busy">
+                    <div class="status-icon"></div>
+                    <div class="status-label">Busy</div>
+                    <div class="status-value" id="busy-count">0</div>
+                </div>
+                <div class="status-item status-offline">
+                    <div class="status-icon"></div>
+                    <div class="status-label">Offline</div>
+                    <div class="status-value" id="offline-count">0</div>
+                </div>
+            </div>
+
+            <div class="controls">
+                <div class="control-group">
+                    <label for="city">City:</label>
+                    <select id="city-select">
+                        <option value="">Custom Location</option>
+                        <option value="Erbil" selected>Erbil</option>
+                        <option value="Duhok">Duhok</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label for="radius">Search Radius:</label>
+                    <div class="radius-control">
+                        <input type="range" id="radius" min="1" max="20" step="1" value="5">
+                        <div class="radius-values">
+                            <span id="radius-value">0.05</span>° (≈ <span id="radius-km">5.5</span> km)
+                        </div>
+                    </div>
+                </div>
+
+                <button id="center-map" class="primary-button">
+                    <i class="icon-center"></i> Center Map
+                </button>
+            </div>
+
+            <div class="driver-list-container">
+                <div class="driver-list-header">
+                    <h2>Drivers</h2>
+                    <div class="driver-filter">
+                        <select id="status-filter">
+                            <option value="all">All Statuses</option>
+                            <option value="Available">Available</option>
+                            <option value="Busy">Busy</option>
+                            <option value="Offline">Offline</option>
+                        </select>
+                        <input type="text" id="driver-search" placeholder="Search drivers...">
+                    </div>
+                </div>
+                <div class="driver-list" id="driver-list">
+                    <!-- Driver list items will be added here dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Map container -->
+        <div class="map-container">
+            <div id="map"></div>
+
+            <div class="map-controls">
+                <button id="toggle-sidebar" class="icon-button">
+                    <i class="icon-menu"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+
+    <!-- Custom driver update script -->
+    <script src="/update-drivers.js"></script>
+
+    <script>
+        // Initialize sidebar when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, initializing sidebar');
+            if (typeof initializeSidebar === 'function') {
+                initializeSidebar();
+            } else {
+                console.error('initializeSidebar function not found');
+            }
+        });
+    </script>
+
+    <!-- Leaflet Marker Rotation Plugin -->
+    <script>
+        // Improved Leaflet marker rotation plugin
+        L.Marker.prototype.setRotationAngle = function(angle) {
+            // Reset transform first to avoid accumulating transforms
+            if (!this._baseTransform) {
+                // Store the base transform the first time
+                this._baseTransform = getComputedStyle(this._icon).transform;
+                if (this._baseTransform === 'none') this._baseTransform = '';
+            }
+
+            // Apply rotation
+            this._icon.style.transform = this._baseTransform + ' rotate(' + angle + 'deg)';
+            return this;
+        };
+
+        // Improved Leaflet marker slide animation plugin with easing
+        L.Marker.prototype.slideTo = function(latlng, options) {
+            const self = this;
+
+            // Cancel any existing animation
+            if (this._animationId) {
+                cancelAnimationFrame(this._animationId);
+                this._animationId = null;
+            }
+
+            // Default options
+            options = options || {};
+            options.duration = options.duration || 1000;
+            options.keepAtCenter = options.keepAtCenter || false;
+            options.easing = options.easing || 'easeInOutCubic';
+
+            // Get current position
+            const startPos = this.getLatLng();
+            const startTime = Date.now();
+
+            // Store target position for potential interruptions
+            this._targetPos = latlng;
+
+            // Skip animation if distance is too small (prevents jitter)
+            const dx = Math.abs(latlng[1] - startPos.lng);
+            const dy = Math.abs(latlng[0] - startPos.lat);
+            if (dx < 0.00001 && dy < 0.00001) {
+                this.setLatLng(latlng);
+                return this;
+            }
+
+            // Easing functions collection
+            const easingFunctions = {
+                // Cubic easing - smooth acceleration and deceleration
+                easeInOutCubic: function(t) {
+                    return t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
+                },
+                // Quadratic easing - gentler acceleration/deceleration
+                easeInOutQuad: function(t) {
+                    return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+                },
+                // Linear - constant speed (no easing)
+                linear: function(t) {
+                    return t;
+                }
+            };
+
+            // Get the selected easing function
+            const ease = easingFunctions[options.easing] || easingFunctions.easeInOutCubic;
+
+            function animate() {
+                // Calculate progress
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(1, elapsed / options.duration);
+                const easedProgress = ease(progress);
+
+                // Calculate new position
+                const lat = startPos.lat + (latlng[0] - startPos.lat) * easedProgress;
+                const lng = startPos.lng + (latlng[1] - startPos.lng) * easedProgress;
+
+                // Update marker position
+                self.setLatLng([lat, lng]);
+
+                // Ensure marker stays clickable during animation
+                if (self._icon) {
+                    // Maintain z-index during animation
+                    self._icon.style.zIndex = "1000";
+                    // Ensure pointer events are enabled
+                    self._icon.style.pointerEvents = "auto";
+                }
+
+                // Continue animation if not complete
+                if (progress < 1) {
+                    self._animationId = requestAnimationFrame(animate);
+                } else {
+                    // Ensure final position is exactly the target
+                    self.setLatLng(latlng);
+                    self._animationId = null;
+                }
+            }
+
+            // Start animation
+            this._animationId = requestAnimationFrame(animate);
+
+            return this;
+        };
+    </script>
+
+    <script>
+        // Map initialization
+        const map = L.map('map').setView([0, 0], 2);
+
+        // Add OpenStreetMap tile layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // Driver markers
+        let markers = {};
+        let userMarker = null;
+        let searchCircle = null;
+
+        // Taxi icons for different driver statuses
+        const carIcons = {
+            'Available': L.icon({
+                iconUrl: '/car-icon-available.svg',
+                iconSize: [32, 32],
+                iconAnchor: [16, 16],
+                popupAnchor: [0, -16],
+                className: 'taxi-icon driver-available'
+            }),
+            'Busy': L.icon({
+                iconUrl: '/car-icon-busy.svg',
+                iconSize: [32, 32],
+                iconAnchor: [16, 16],
+                popupAnchor: [0, -16],
+                className: 'taxi-icon driver-busy'
+            }),
+            'Offline': L.icon({
+                iconUrl: '/car-icon-offline.svg',
+                iconSize: [32, 32],
+                iconAnchor: [16, 16],
+                popupAnchor: [0, -16],
+                className: 'taxi-icon driver-offline'
+            }),
+            // Default icon (yellow)
+            'default': L.icon({
+                iconUrl: '/car-icon.svg',
+                iconSize: [32, 32],
+                iconAnchor: [16, 16],
+                popupAnchor: [0, -16],
+                className: 'taxi-icon'
+            })
+        };
+
+        // Previous positions for interpolation
+        let previousPositions = {};
+
+        // Status colors (already defined in the global scope)
+        // Using the existing statusColors variable
+
+        // User location (default to Erbil)
+        let userLocation = {
+            lat: 36.191113, // Erbil
+            lon: 44.009167
+        };
+
+        // Selected city
+        let selectedCity = "Erbil";
+
+        // Search radius
+        let searchRadius = 0.05; // degrees (5/100)
+
+        // Update UI elements
+        const driverCountElement = document.querySelector('.driver-count');
+        const availableCountElement = document.getElementById('available-count');
+        const busyCountElement = document.getElementById('busy-count');
+        const offlineCountElement = document.getElementById('offline-count');
+        const radiusInput = document.getElementById('radius');
+        const radiusValueElement = document.getElementById('radius-value');
+        const radiusKmElement = document.getElementById('radius-km');
+        const centerMapButton = document.getElementById('center-map');
+
+        // Initialize search circle (no user marker)
+        function initializeSearchCircle() {
+            // Add search circle
+            if (searchCircle) {
+                map.removeLayer(searchCircle);
+            }
+
+            // Convert degrees to meters (more accurate conversion)
+            const radiusMeters = searchRadius * 111000; // 111km per degree at equator
+
+            searchCircle = L.circle([userLocation.lat, userLocation.lon], {
+                color: 'blue',
+                fillColor: '#30f',
+                fillOpacity: 0.1,
+                radius: radiusMeters,
+                weight: 2,
+                // Prevent mouse events on the circle to avoid jumping icons
+                interactive: false,
+                // Ensure circle is below markers
+                pane: 'overlayPane',
+                // Disable pointer events
+                className: 'no-pointer-events'
+            }).addTo(map);
+
+            // Center map on location with appropriate zoom level based on radius
+            // Calculate zoom level based on radius (smaller radius = higher zoom)
+            let zoomLevel = 13; // Default zoom level
+            if (searchRadius <= 0.02) zoomLevel = 14;
+            else if (searchRadius <= 0.05) zoomLevel = 13;
+            else if (searchRadius <= 0.1) zoomLevel = 12;
+            else if (searchRadius <= 0.2) zoomLevel = 11;
+            else zoomLevel = 10;
+
+            // Center map on location with calculated zoom level
+            map.setView([userLocation.lat, userLocation.lon], zoomLevel);
+
+            console.log(`Circle centered at ${userLocation.lat}, ${userLocation.lon} with radius ${radiusMeters}m (${searchRadius} degrees)`);
+        }
+
+        // Update radius display
+        function updateRadiusDisplay() {
+            // Update text display with radius in degrees
+            radiusValueElement.textContent = searchRadius.toFixed(2);
+
+            // Convert to kilometers (111km per degree at equator)
+            const radiusKm = (searchRadius * 111.0).toFixed(1);
+            radiusKmElement.textContent = radiusKm;
+
+            console.log(`Radius updated: ${searchRadius} degrees (${radiusKm} km)`);
+
+            // Don't recreate search circle here - let the caller decide
+            // This prevents duplicate circle creation
+        }
+
+        // WebSocket connection
+        let socket = null;
+
+        // Connect to WebSocket server
+        function connectWebSocket() {
+            // Close existing connection if any
+            if (socket) {
+                socket.close();
+            }
+
+            // Create WebSocket connection
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+
+            socket = new WebSocket(wsUrl);
+
+            // Connection opened
+            socket.addEventListener('open', (event) => {
+                console.log('WebSocket connection established');
+                driverCountElement.textContent = 'Connected to server...';
+
+                // Send initial parameters to the server
+                sendClientParameters();
+
+                // Initialize search circle (no user marker)
+                initializeSearchCircle();
+            });
+
+            // Connection closed
+            socket.addEventListener('close', (event) => {
+                console.log('WebSocket connection closed');
+                driverCountElement.textContent = 'Connection lost. Reconnecting...';
+
+                // Clear all markers when connection is lost
+                Object.keys(markers).forEach(markerId => {
+                    map.removeLayer(markers[markerId]);
+                    delete markers[markerId];
+                });
+
+                // Reset status counts
+                availableCountElement.textContent = 0;
+                busyCountElement.textContent = 0;
+                offlineCountElement.textContent = 0;
+
+                // Reconnect after a delay
+                setTimeout(connectWebSocket, 2000);
+            });
+
+            // Connection error
+            socket.addEventListener('error', (event) => {
+                console.error('WebSocket error:', event);
+                driverCountElement.textContent = 'Connection error';
+            });
+
+            // Listen for messages
+            socket.addEventListener('message', (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+
+                    // Handle different message types
+                    if (data.type === 'drivers_update') {
+                        updateDrivers(data);
+                    }
+                } catch (error) {
+                    console.error('Error processing WebSocket message:', error);
+                }
+            });
+        }
+
+        // Update drivers based on WebSocket data
+        function updateDrivers(data) {
+            // Update driver count
+            driverCountElement.textContent = `${data.count} Drivers Nearby`;
+
+            // Update center location if provided
+            let locationChanged = false;
+            if (data.center) {
+                // Always update center from server
+                userLocation.lat = data.center.lat;
+                userLocation.lon = data.center.lon;
+                locationChanged = true;
+
+                console.log(`Updated center from server: ${userLocation.lat}, ${userLocation.lon}`);
+
+                // Update user marker position
+                if (userMarker) {
+                    userMarker.setLatLng([userLocation.lat, userLocation.lon]);
+                }
+            }
+
+            // Update search radius if provided
+            let radiusChanged = false;
+            if (data.radius && Math.abs(data.radius - searchRadius) > 0.001) {
+                searchRadius = data.radius;
+
+                // Update radius slider (convert to slider value 1-20)
+                // Ensure minimum radius is 0.01 degrees (slider value 1)
+                if (searchRadius < 0.01) {
+                    searchRadius = 0.01;
+                }
+
+                const radiusSliderValue = Math.max(1, Math.round(searchRadius * 100));
+                radiusInput.value = radiusSliderValue;
+                radiusChanged = true;
+
+                console.log(`Updated radius from server: ${searchRadius} degrees (${radiusSliderValue} slider value)`);
+
+                // Update radius display text
+                radiusValueElement.textContent = searchRadius.toFixed(2);
+                const radiusKm = (searchRadius * 111.0).toFixed(1);
+                radiusKmElement.textContent = radiusKm;
+            }
+
+            // Update search circle if location or radius changed
+            if ((locationChanged || radiusChanged) && searchCircle) {
+                // Remove old circle and create a new one for better rendering
+                map.removeLayer(searchCircle);
+
+                // Convert degrees to meters (more accurate conversion)
+                const radiusMeters = searchRadius * 111000; // 111km per degree at equator
+
+                // Create new circle
+                searchCircle = L.circle([userLocation.lat, userLocation.lon], {
+                    color: 'blue',
+                    fillColor: '#30f',
+                    fillOpacity: 0.1,
+                    radius: radiusMeters,
+                    weight: 2
+                }).addTo(map);
+            }
+
+            // Reset status counts
+            let availableCount = 0;
+            let busyCount = 0;
+            let offlineCount = 0;
+
+            // Track existing markers to remove stale ones
+            const existingMarkers = new Set(Object.keys(markers));
+
+            // Update or add markers for each driver
+            data.drivers.forEach(driver => {
+                const markerId = `driver-${driver.id}`;
+                existingMarkers.delete(markerId);
+
+                // Update status counts
+                if (driver.status === 'Available') {
+                    availableCount++;
+                } else if (driver.status === 'Busy') {
+                    busyCount++;
+                } else if (driver.status === 'Offline') {
+                    offlineCount++;
+                }
+
+                // Create or update marker with smooth transitions
+                if (markers[markerId]) {
+                    // Get previous position
+                    const prev = previousPositions[markerId] || { lat: driver.lat, lon: driver.lon };
+
+                    // Use heading from backend (already in degrees)
+                    const heading = driver.heading;
+
+                    // Apply rotation to the marker icon based on backend heading
+                    markers[markerId].setRotationAngle(heading);
+
+                    // All drivers are Available for testing smoothness
+                    markers[markerId]._icon.classList.add('driver-available');
+                    markers[markerId]._icon.classList.remove('driver-busy');
+
+                    // Store position history for detecting jumps
+                    if (!markers[markerId]._positionHistory) {
+                        markers[markerId]._positionHistory = [];
+                    }
+
+                    // Add current position to history (keep last 3 positions)
+                    markers[markerId]._positionHistory.push({lat: driver.lat, lon: driver.lon});
+                    if (markers[markerId]._positionHistory.length > 3) {
+                        markers[markerId]._positionHistory.shift();
+                    }
+
+                    // Calculate distance between current and previous position
+                    const distance = Math.sqrt(
+                        Math.pow(driver.lat - prev.lat, 2) +
+                        Math.pow(driver.lon - prev.lon, 2)
+                    );
+
+                    // Detect jumps (sudden large movements)
+                    let isJump = false;
+                    if (markers[markerId]._positionHistory.length >= 3) {
+                        const positions = markers[markerId]._positionHistory;
+                        const prevDistance = Math.sqrt(
+                            Math.pow(positions[1].lat - positions[0].lat, 2) +
+                            Math.pow(positions[1].lon - positions[0].lon, 2)
+                        );
+
+                        // If current distance is much larger than previous distance, it's a jump
+                        if (distance > prevDistance * 5 && distance > 0.0005) {
+                            isJump = true;
+                            console.log(`Jump detected for driver ${driver.id}: ${distance.toFixed(6)} vs ${prevDistance.toFixed(6)}`);
+                        }
+                    }
+
+                    // Skip animation if the distance is too small (prevents jitter) or if it's a jump
+                    if (distance < 0.00001 || isJump) {
+                        // For jumps, use a fade-out/fade-in effect
+                        if (isJump) {
+                            // Fade out
+                            markers[markerId]._icon.style.transition = 'opacity 200ms ease-in-out';
+                            markers[markerId]._icon.style.opacity = '0';
+
+                            // After fade out, move and fade in
+                            setTimeout(() => {
+                                markers[markerId].setLatLng([driver.lat, driver.lon]);
+                                markers[markerId]._icon.style.opacity = '1';
+                            }, 200);
+                        } else {
+                            // Just set position for tiny movements
+                            markers[markerId].setLatLng([driver.lat, driver.lon]);
+                        }
+                    } else {
+                        // Store speed in marker for smoothing
+                        if (!markers[markerId]._speedHistory) {
+                            markers[markerId]._speedHistory = [];
+                        }
+
+                        // Add current speed to history (keep last 5 values)
+                        markers[markerId]._speedHistory.push(driver.speed);
+                        if (markers[markerId]._speedHistory.length > 5) {
+                            markers[markerId]._speedHistory.shift();
+                        }
+
+                        // Calculate average speed for smoother acceleration/deceleration
+                        const avgSpeed = markers[markerId]._speedHistory.reduce((sum, speed) => sum + speed, 0) /
+                                        markers[markerId]._speedHistory.length;
+
+                        // Calculate animation duration based on smoothed speed
+                        // Faster cars = shorter animation duration
+                        // Speed is in degrees per second, we want duration in milliseconds
+                        let duration = 200; // default for WebSocket
+
+                        if (avgSpeed > 0) {
+                            // Calculate real-world duration in ms
+                            const realDuration = (distance / avgSpeed) * 1000;
+
+                            // Clamp between 150ms and 300ms for smoother animation
+                            // Longer durations create smoother movement
+                            duration = Math.min(300, Math.max(150, realDuration));
+                        }
+
+                        // Choose easing based on speed change
+                        let easing = 'easeInOutCubic'; // default
+
+                        // Determine if accelerating, decelerating, or constant speed
+                        if (markers[markerId]._speedHistory.length >= 2) {
+                            const prevSpeed = markers[markerId]._speedHistory[markers[markerId]._speedHistory.length - 2];
+                            const speedDiff = driver.speed - prevSpeed;
+
+                            if (speedDiff > 0.00001) {
+                                easing = 'easeInOutQuad'; // accelerating
+                            } else if (speedDiff < -0.00001) {
+                                easing = 'easeInOutCubic'; // decelerating (more pronounced)
+                            } else {
+                                easing = 'linear'; // constant speed
+                            }
+                        }
+
+                        // Smooth transition to new position with appropriate easing
+                        markers[markerId].slideTo([driver.lat, driver.lon], {
+                            duration: duration,
+                            keepAtCenter: false,
+                            easing: easing
+                        });
+                    }
+
+
+                    // Create detailed popup content with driver information
+                    const popupContent = `
+                        <div style="min-width: 180px; padding: 5px;">
+                            <h3 style="margin: 0 0 8px 0; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 5px;">
+                                Taxi #${driver.id}
+                            </h3>
+                            <div style="margin-bottom: 5px;">
+                                <strong>Status:</strong>
+                                <span style="color:${statusColors[driver.status]}; font-weight: bold;">
+                                    ${driver.status}
+                                </span>
+                            </div>
+                            <div style="margin-bottom: 5px;">
+                                <strong>Distance:</strong> ${driver.distance !== undefined ? driver.distance.toFixed(2) : 'N/A'} km
+                            </div>
+                            <div style="margin-bottom: 5px;">
+                                <strong>Heading:</strong> ${driver.heading !== undefined ? driver.heading.toFixed(1) : 'N/A'}°
+                                <span style="color: #666; font-size: 0.9em;">
+                                    ${driver.heading !== undefined ? getDirectionFromHeading(driver.heading) : 'N/A'}
+                                </span>
+                            </div>
+                            <div style="margin-bottom: 5px;">
+                                <strong>Speed:</strong> ${driver.speed !== undefined ? (driver.speed * 111.0 * 3600).toFixed(1) : 'N/A'} km/h
+                            </div>
+                            <div style="margin-bottom: 5px;">
+                                <strong>Coordinates:</strong><br>
+                                ${driver.lat !== undefined ? driver.lat.toFixed(6) : 'N/A'}, ${driver.lon !== undefined ? driver.lon.toFixed(6) : 'N/A'}
+                            </div>
+                        </div>
+                    `;
+                    // Update popup content
+                    if (markers[markerId].getPopup()) {
+                        markers[markerId].getPopup().setContent(popupContent);
+                    } else {
+                        // Create popup if it doesn't exist
+                        markers[markerId].bindPopup(popupContent, {
+                            offset: [0, -16],
+                            closeButton: true,
+                            autoClose: false,
+                            className: 'driver-popup',
+                            // Disable auto-panning which can cause jumping
+                            autoPan: false
+                        });
+
+                        // Add click event listener to ensure popup opens
+                        markers[markerId].on('click', function() {
+                            this.openPopup();
+                        });
+                    }
+
+                    // Ensure marker is interactive and has proper z-index
+                    markers[markerId].setZIndexOffset(1000);
+
+                    // Update icon if status has changed
+                    const currentIcon = markers[markerId].options.icon;
+                    const newIcon = carIcons[driver.status] || carIcons['default'];
+
+                    // Check if we need to update the icon (status changed)
+                    if (currentIcon.options.iconUrl !== newIcon.options.iconUrl) {
+                        markers[markerId].setIcon(newIcon);
+                    }
+                } else {
+                    // Select the appropriate icon based on driver status
+                    const icon = carIcons[driver.status] || carIcons['default'];
+
+                    // Create new marker with the appropriate icon
+                    const marker = L.marker([driver.lat, driver.lon], {
+                        icon: icon,
+                        // Ensure marker is interactive
+                        interactive: true,
+                        // Disable auto-panning which can cause jumping
+                        autoPan: false,
+                        // Set higher z-index to ensure it's clickable
+                        zIndexOffset: 1000
+                    }).addTo(map);
+
+                    // Set initial rotation based on backend heading
+                    marker.setRotationAngle(driver.heading);
+
+                    // Create detailed popup content with driver information
+                    const popupContent = `
+                        <div style="min-width: 180px; padding: 5px;">
+                            <h3 style="margin: 0 0 8px 0; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 5px;">
+                                Taxi #${driver.id}
+                            </h3>
+                            <div style="margin-bottom: 5px;">
+                                <strong>Status:</strong>
+                                <span style="color:${statusColors[driver.status]}; font-weight: bold;">
+                                    ${driver.status}
+                                </span>
+                            </div>
+                            <div style="margin-bottom: 5px;">
+                                <strong>Distance:</strong> ${driver.distance !== undefined ? driver.distance.toFixed(2) : 'N/A'} km
+                            </div>
+                            <div style="margin-bottom: 5px;">
+                                <strong>Heading:</strong> ${driver.heading !== undefined ? driver.heading.toFixed(1) : 'N/A'}°
+                                <span style="color: #666; font-size: 0.9em;">
+                                    ${driver.heading !== undefined ? getDirectionFromHeading(driver.heading) : 'N/A'}
+                                </span>
+                            </div>
+                            <div style="margin-bottom: 5px;">
+                                <strong>Speed:</strong> ${driver.speed !== undefined ? (driver.speed * 111.0 * 3600).toFixed(1) : 'N/A'} km/h
+                            </div>
+                            <div style="margin-bottom: 5px;">
+                                <strong>Coordinates:</strong><br>
+                                ${driver.lat !== undefined ? driver.lat.toFixed(6) : 'N/A'}, ${driver.lon !== undefined ? driver.lon.toFixed(6) : 'N/A'}
+                            </div>
+                        </div>
+                    `;
+
+                    // Make popup open on click (not hover)
+                    marker.bindPopup(popupContent, {
+                        offset: [0, -16],
+                        closeButton: true,
+                        autoClose: false,
+                        className: 'driver-popup',
+                        // Disable auto-panning which can cause jumping
+                        autoPan: false
+                    });
+
+                    // Add click event listener to ensure popup opens
+                    marker.on('click', function() {
+                        this.openPopup();
+                    });
+
+                    // Store marker
+                    markers[markerId] = marker;
+                }
+
+                // Store current position for next update
+                previousPositions[markerId] = { lat: driver.lat, lon: driver.lon };
+            });
+
+            // Remove stale markers
+            existingMarkers.forEach(markerId => {
+                map.removeLayer(markers[markerId]);
+                delete markers[markerId];
+                delete previousPositions[markerId];
+            });
+
+            // Update status counts
+            availableCountElement.textContent = availableCount;
+            busyCountElement.textContent = busyCount;
+            offlineCountElement.textContent = offlineCount;
+
+            // Update driver list in sidebar
+            updateDriverList(data.drivers);
+        }
+
+        // Calculate distance between two points in kilometers
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            // Simple Euclidean distance (not accurate for long distances)
+            const dx = (lon2 - lon1) * 111.0 * Math.cos((lat1 + lat2) * Math.PI / 360);
+            const dy = (lat2 - lat1) * 111.0;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        // Get cardinal direction from heading angle
+        function getDirectionFromHeading(heading) {
+            const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW', 'N'];
+            return directions[Math.round(heading / 45) % 8];
+        }
+
+        // Update driver list in sidebar
+        function updateDriverList(drivers) {
+            if (!drivers || !drivers.length) {
+                console.log("No drivers to display in list");
+                return;
+            }
+
+            console.log(`Updating driver list with ${drivers.length} drivers`);
+
+            const driverListElement = document.getElementById('driver-list');
+            if (!driverListElement) {
+                console.error("Driver list element not found!");
+                return;
+            }
+
+            const statusFilter = document.getElementById('status-filter')?.value || 'all';
+            const searchQuery = document.getElementById('driver-search')?.value?.toLowerCase() || '';
+
+            // Clear the current list
+            driverListElement.innerHTML = '';
+
+            // Filter drivers based on status and search query
+            const filteredDrivers = drivers.filter(driver => {
+                // Filter by status
+                if (statusFilter !== 'all' && driver.status !== statusFilter) {
+                    return false;
+                }
+
+                // Filter by search query (driver ID)
+                if (searchQuery && !`Taxi #${driver.id}`.toLowerCase().includes(searchQuery)) {
+                    return false;
+                }
+
+                return true;
+            });
+
+            // Sort drivers by ID
+            filteredDrivers.sort((a, b) => a.id - b.id);
+
+            console.log(`Displaying ${filteredDrivers.length} drivers in list after filtering`);
+
+            // Create driver list items
+            filteredDrivers.forEach(driver => {
+                const driverItem = document.createElement('div');
+                driverItem.className = `driver-item driver-status-${driver.status.toLowerCase()}`;
+                driverItem.dataset.id = driver.id;
+
+                // Calculate speed in km/h with null check
+                const speedKmh = driver.speed !== undefined ? (driver.speed * 111.0 * 3600).toFixed(1) : 'N/A';
+
+                // Get direction from heading with null check
+                const direction = driver.heading !== undefined ? getDirectionFromHeading(driver.heading) : 'N/A';
+
+                driverItem.innerHTML = `
+                    <div class="driver-icon" style="background-image: url('/car-icon-${driver.status.toLowerCase()}.svg')"></div>
+                    <div class="driver-info">
+                        <div class="driver-id">Taxi #${driver.id}</div>
+                        <div class="driver-status">
+                            <span class="driver-status-dot"></span>
+                            ${driver.status}
+                        </div>
+                        <div class="driver-details">
+                            <span class="driver-speed">${speedKmh} km/h</span>
+                            <span class="driver-direction">${direction}</span>
+                            <span class="driver-distance">${driver.distance !== undefined ? driver.distance.toFixed(1) : 'N/A'} km</span>
+                        </div>
+                    </div>
+                `;
+
+                // Add click event to highlight on map
+                driverItem.addEventListener('click', () => {
+                    // Remove selected class from all items
+                    document.querySelectorAll('.driver-item').forEach(item => {
+                        item.classList.remove('selected');
+                    });
+
+                    // Add selected class to clicked item
+                    driverItem.classList.add('selected');
+
+                    // Find the marker and open its popup
+                    const markerId = `driver-${driver.id}`;
+                    if (markers[markerId]) {
+                        // Pan to the marker
+                        map.panTo(markers[markerId].getLatLng());
+
+                        // Open the popup
+                        markers[markerId].openPopup();
+
+                        // Add a temporary highlight effect to the marker
+                        if (markers[markerId]._icon) {
+                            markers[markerId]._icon.classList.add('highlight-marker');
+                            setTimeout(() => {
+                                markers[markerId]._icon.classList.remove('highlight-marker');
+                            }, 1500);
+                        }
+                    }
+                });
+
+                driverListElement.appendChild(driverItem);
+            });
+
+            // Show message if no drivers match the filters
+            if (filteredDrivers.length === 0) {
+                const noDriversMessage = document.createElement('div');
+                noDriversMessage.className = 'no-drivers-message';
+                noDriversMessage.textContent = 'No drivers match your filters';
+                driverListElement.appendChild(noDriversMessage);
+            }
+
+            // Add event listeners for filter and search if not already added
+            if (!document.getElementById('status-filter').hasAttribute('data-initialized')) {
+                document.getElementById('status-filter').addEventListener('change', () => {
+                    updateDriverList(drivers);
+                });
+                document.getElementById('status-filter').setAttribute('data-initialized', 'true');
+            }
+
+            if (!document.getElementById('driver-search').hasAttribute('data-initialized')) {
+                document.getElementById('driver-search').addEventListener('input', () => {
+                    updateDriverList(drivers);
+                });
+                document.getElementById('driver-search').setAttribute('data-initialized', 'true');
+            }
+        }
+
+        // Send client parameters to the server
+        function sendClientParameters() {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                console.warn('WebSocket not connected, cannot send parameters');
+                return;
+            }
+
+            // Create parameters object
+            const params = {
+                type: 'client_params',
+                lat: userLocation.lat,
+                lon: userLocation.lon,
+                radius: searchRadius,
+                city: selectedCity
+            };
+
+            // Send to server
+            socket.send(JSON.stringify(params));
+            console.log('Sent client parameters to server:', params);
+        }
+
+        // Initial fetch to get city center (still needed for initial setup)
+        async function fetchInitialLocation() {
+            return new Promise(async (resolve, reject) => {
+                try {
+                    let url = `/api/drivers?radius=${searchRadius}`;
+
+                    if (selectedCity) {
+                        url += `&city=${selectedCity}`;
+                    } else {
+                        url += `&lat=${userLocation.lat}&lon=${userLocation.lon}`;
+                    }
+
+                    const response = await fetch(url);
+                    const data = await response.json();
+
+                    // Update user location from response if using city
+                    if (selectedCity && data.center) {
+                        userLocation.lat = data.center.lat;
+                        userLocation.lon = data.center.lon;
+
+                        // Recreate search circle with new location
+                        initializeSearchCircle();
+                    }
+
+                    // Update search radius from response
+                    if (data.radius) {
+                        searchRadius = data.radius;
+                        radiusInput.value = searchRadius;
+                        updateRadiusDisplay();
+                    }
+
+                    // Center map on user location
+                    map.setView([userLocation.lat, userLocation.lon], 10);
+
+                    resolve();
+                } catch (error) {
+                    console.error('Error fetching initial location:', error);
+                    reject(error);
+                }
+            });
+        }
+
+        // Initialize sidebar toggle functionality
+        function initializeSidebar() {
+            const toggleSidebarButton = document.getElementById('toggle-sidebar');
+            const sidebar = document.querySelector('.sidebar');
+
+            // Set initial state
+            let sidebarVisible = true;
+
+            toggleSidebarButton.addEventListener('click', () => {
+                sidebarVisible = !sidebarVisible;
+
+                if (sidebarVisible) {
+                    // Show sidebar
+                    sidebar.style.display = 'flex';
+                    setTimeout(() => {
+                        sidebar.style.transform = 'translateX(0)';
+                    }, 10);
+                    toggleSidebarButton.innerHTML = '<i class="icon-menu"></i>';
+                    toggleSidebarButton.setAttribute('title', 'Hide Sidebar');
+                } else {
+                    // Hide sidebar
+                    sidebar.style.transform = 'translateX(-100%)';
+                    setTimeout(() => {
+                        sidebar.style.display = 'none';
+                    }, 300); // Match transition duration
+                    toggleSidebarButton.innerHTML = '<i class="icon-menu" style="transform: rotate(180deg);"></i>';
+                    toggleSidebarButton.setAttribute('title', 'Show Sidebar');
+                }
+
+                // Trigger a resize event to update the map
+                window.dispatchEvent(new Event('resize'));
+            });
+        }
+
+        // Initialize map
+        function initializeMap() {
+            // Get user's location if available
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        userLocation.lat = position.coords.latitude;
+                        userLocation.lon = position.coords.longitude;
+                        initializeSearchCircle();
+                        // WebSocket will provide driver updates
+                    },
+                    (error) => {
+                        console.warn('Geolocation error:', error);
+                        initializeSearchCircle(); // Use default location
+                        // WebSocket will provide driver updates
+                    }
+                );
+            } else {
+                console.warn('Geolocation not supported');
+                initializeSearchCircle(); // Use default location
+                // WebSocket will provide driver updates
+            }
+
+            // Set up click handler to update user location
+            map.on('click', (e) => {
+                userLocation.lat = e.latlng.lat;
+                userLocation.lon = e.latlng.lng;
+                initializeSearchCircle();
+                // Send updated parameters to the server
+                sendClientParameters();
+            });
+
+            // Set up radius change handler
+            radiusInput.addEventListener('input', () => {
+                // Convert slider value (1-20) to radius in degrees (0.01-0.2)
+                const sliderValue = parseInt(radiusInput.value);
+
+                // Ensure minimum value is 1 (0.01 degrees)
+                if (sliderValue < 1) {
+                    radiusInput.value = 1;
+                    searchRadius = 0.01;
+                } else {
+                    searchRadius = sliderValue / 100; // Convert to degrees (e.g., 5 -> 0.05 degrees)
+                }
+
+                console.log(`Slider value: ${sliderValue}, converted to radius: ${searchRadius} degrees`);
+
+                // Update display
+                updateRadiusDisplay();
+
+                // Send updated parameters to the server
+                sendClientParameters();
+
+                // Update search circle with new radius
+                initializeSearchCircle();
+            });
+
+            // Set up city selector handler
+            const citySelect = document.getElementById('city-select');
+            citySelect.addEventListener('change', () => {
+                selectedCity = citySelect.value;
+                if (!selectedCity) {
+                    // If custom location is selected, keep current location
+                    // but clear the city selection
+                    selectedCity = '';
+                }
+                // Fetch initial location for the city
+                fetchInitialLocation().then(() => {
+                    // After location is updated, send parameters to server
+                    sendClientParameters();
+                });
+            });
+
+            // Set up center map button
+            centerMapButton.addEventListener('click', () => {
+                // Center map on search location
+                map.setView([userLocation.lat, userLocation.lon], 10);
+                // Recreate search circle to ensure it's properly positioned
+                initializeSearchCircle();
+            });
+
+            // Initialize radius display
+            updateRadiusDisplay();
+
+            // Connect to WebSocket server
+            connectWebSocket();
+
+            // Initial fetch to get city center and setup
+            fetchInitialLocation();
+        }
+
+        // Start the application
+        initializeMap();
+        initializeSidebar();
+    </script>
+</body>
+</html>
