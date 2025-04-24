@@ -258,7 +258,7 @@
             flex-direction: column;
             overflow: hidden; /* Important: prevent container from scrolling */
             min-height: 0; /* Critical for flexbox to allow child to scroll */
-            max-height: calc(100% - 200px); /* Ensure it doesn't overflow the sidebar */
+            height: calc(100% - 250px); /* Fixed height based on other elements */
             position: relative; /* Create stacking context */
         }
 
@@ -300,21 +300,24 @@
 
         .driver-list {
             flex: 1;
-            overflow-y: auto !important; /* Force scrolling */
+            overflow-y: scroll !important; /* Force scrolling with scroll instead of auto */
             position: relative;
             min-height: 0; /* Critical for flexbox scrolling */
             padding-bottom: 20px; /* Add some padding at the bottom */
             height: 100%; /* Ensure it takes full height */
             -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
-            will-change: transform; /* Hardware acceleration for smoother scrolling */
             overscroll-behavior: contain; /* Prevent scroll chaining */
-            transform: translateZ(0); /* Force hardware acceleration */
         }
 
-        /* Ensure the driver list container doesn't interfere with scrolling */
-        .driver-list > div {
-            position: relative;
-            min-height: 100%;
+        /* Footer for driver list */
+        .driver-list-footer {
+            padding: 15px;
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            background-color: #f5f5f5;
+            border-top: 1px solid #ddd;
+            margin-top: 10px;
         }
 
         /* Custom scrollbar for better UX */
@@ -342,19 +345,15 @@
             cursor: pointer;
             height: 80px;
             box-sizing: border-box;
-            transition: all 0.2s ease;
             align-items: center;
-            position: relative;
         }
 
         .driver-item:hover {
-            background-color: rgba(52, 152, 219, 0.05);
-            transform: translateY(-1px);
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            background-color: rgba(67, 97, 238, 0.05);
         }
 
         .driver-item.selected {
-            background-color: rgba(52, 152, 219, 0.1);
+            background-color: rgba(67, 97, 238, 0.1);
             border-left-width: 6px;
         }
 
@@ -519,6 +518,11 @@
             const socketRef = React.useRef(null);
             const userActionRef = React.useRef(false); // Track if changes are user-initiated
 
+            // Refs for throttling driver updates
+            const throttledUpdateRef = React.useRef(null);
+            const lastUpdateTimeRef = React.useRef(0);
+            const pendingDriversRef = React.useRef(null);
+
             const [driverCount, setDriverCount] = React.useState(0);
             const [connected, setConnected] = React.useState(false);
             const [drivers, setDrivers] = React.useState([]);
@@ -675,6 +679,12 @@
                     if (socketRef.current) {
                         socketRef.current.close();
                         socketRef.current = null;
+                    }
+
+                    // Clear any pending throttled updates
+                    if (throttledUpdateRef.current) {
+                        clearTimeout(throttledUpdateRef.current);
+                        throttledUpdateRef.current = null;
                     }
                 };
             }, []);
@@ -870,9 +880,37 @@
                     try {
                         const data = JSON.parse(event.data);
                         if (data.type === 'drivers_update') {
-                            // Always update driver data
+                            // Always update driver count immediately
                             setDriverCount(data.count);
-                            setDrivers(data.drivers || []);
+
+                            // Store the latest drivers data
+                            pendingDriversRef.current = data.drivers || [];
+
+                            // Throttle the driver updates to reduce re-renders
+                            const now = Date.now();
+                            const timeSinceLastUpdate = now - lastUpdateTimeRef.current;
+
+                            // If we have a pending update, clear it
+                            if (throttledUpdateRef.current) {
+                                clearTimeout(throttledUpdateRef.current);
+                            }
+
+                            // If it's been less than 500ms since the last update, schedule an update
+                            // Otherwise, update immediately
+                            if (timeSinceLastUpdate < 500) {
+                                throttledUpdateRef.current = setTimeout(() => {
+                                    if (pendingDriversRef.current) {
+                                        setDrivers(pendingDriversRef.current);
+                                        lastUpdateTimeRef.current = Date.now();
+                                        pendingDriversRef.current = null;
+                                        throttledUpdateRef.current = null;
+                                    }
+                                }, 500 - timeSinceLastUpdate);
+                            } else {
+                                setDrivers(pendingDriversRef.current);
+                                lastUpdateTimeRef.current = now;
+                                pendingDriversRef.current = null;
+                            }
 
                             // Only update center and radius if they're different from current values
                             // and if this is not a user-initiated action
@@ -983,77 +1021,47 @@
                 });
             }, [drivers, statusFilter, searchQuery]);
 
-            // Virtual list for driver items (only render visible items)
-            const DriverList = ({ drivers }) => {
+            // Create a stable driver list component that doesn't re-render with position updates
+            const DriverList = () => {
+                // Use refs for DOM manipulation instead of state to avoid re-renders
                 const listRef = React.useRef(null);
-                const scrollPositionRef = React.useRef(0); // Store scroll position
-                const [visibleRange, setVisibleRange] = React.useState({ start: 0, end: 50 });
-                const [selectedDriver, setSelectedDriver] = React.useState(null);
+                const selectedDriverRef = React.useRef(null);
+                const listItemsRef = React.useRef({});
 
-                // Update visible range when scrolling
+                // Create a stable reference to the filtered drivers
+                const stableDriversRef = React.useRef([]);
+
+                // Update the stable reference when filtered drivers change significantly
                 React.useEffect(() => {
-                    if (!listRef.current) return;
+                    // Only update the reference if the filter changes or driver count changes significantly
+                    if (stableDriversRef.current.length === 0 ||
+                        Math.abs(stableDriversRef.current.length - filteredDrivers.length) > 10) {
 
-                    const handleScroll = () => {
-                        // Save current scroll position
-                        scrollPositionRef.current = listRef.current.scrollTop;
+                        // Sort by distance and limit to 100 drivers
+                        const sortedDrivers = [...filteredDrivers].sort((a, b) => a.distance - b.distance).slice(0, 100);
+                        stableDriversRef.current = sortedDrivers;
 
-                        const scrollTop = listRef.current.scrollTop;
-                        const itemHeight = 80; // Approximate height of each driver item
-                        const visibleItems = Math.ceil(listRef.current.clientHeight / itemHeight);
-
-                        const start = Math.floor(scrollTop / itemHeight);
-                        const end = start + visibleItems + 15; // Add larger buffer for smoother scrolling
-
-                        setVisibleRange({ start, end });
-                    };
-
-                    // Add scroll event listener
-                    const listElement = listRef.current;
-                    listElement.addEventListener('scroll', handleScroll);
-
-                    // Initial calculation
-                    handleScroll();
-
-                    return () => {
-                        if (listElement) {
-                            listElement.removeEventListener('scroll', handleScroll);
-                        }
-                    };
-                }, []);
-
-                // Restore scroll position after re-render
-                React.useEffect(() => {
-                    if (listRef.current && scrollPositionRef.current > 0) {
-                        listRef.current.scrollTop = scrollPositionRef.current;
+                        // Force render the list once
+                        renderDriverList();
                     }
-                });
-
-                // Calculate total height for scrollbar
-                const totalHeight = drivers.length * 80;
-
-                // Get visible drivers (with safety bounds)
-                const visibleDrivers = React.useMemo(() => {
-                    return drivers.slice(
-                        Math.max(0, visibleRange.start),
-                        Math.min(drivers.length, visibleRange.end)
-                    );
-                }, [drivers, visibleRange.start, visibleRange.end]);
-
-                // Show message if no drivers match filters
-                if (drivers.length === 0) {
-                    return (
-                        <div className="driver-list" ref={listRef}>
-                            <div className="no-drivers-message" style={{ padding: '40px 20px', textAlign: 'center', color: '#666' }}>
-                                No drivers match your filters
-                            </div>
-                        </div>
-                    );
-                }
+                }, [filteredDrivers]);
 
                 // Handle driver selection
                 const handleDriverClick = (driver) => {
-                    setSelectedDriver(driver.id);
+                    // Update selected driver reference
+                    if (selectedDriverRef.current) {
+                        const prevSelected = document.querySelector('.driver-item.selected');
+                        if (prevSelected) {
+                            prevSelected.classList.remove('selected');
+                        }
+                    }
+
+                    // Update new selection
+                    selectedDriverRef.current = driver.id;
+                    const newSelected = document.getElementById(`driver-${driver.id}`);
+                    if (newSelected) {
+                        newSelected.classList.add('selected');
+                    }
 
                     // Mark as user action
                     userActionRef.current = true;
@@ -1070,44 +1078,139 @@
                     }
                 };
 
-                // Calculate position for each driver item
-                const getDriverPosition = (index) => {
-                    const driverIndex = visibleRange.start + index;
-                    return driverIndex * 80;
+                // Store scroll position in a ref to persist across renders
+                const scrollPositionRef = React.useRef(0);
+
+                // Save scroll position when scrolling
+                React.useEffect(() => {
+                    if (!listRef.current) return;
+
+                    const handleScroll = () => {
+                        scrollPositionRef.current = listRef.current.scrollTop;
+                    };
+
+                    listRef.current.addEventListener('scroll', handleScroll);
+                    return () => {
+                        if (listRef.current) {
+                            listRef.current.removeEventListener('scroll', handleScroll);
+                        }
+                    };
+                }, []);
+
+                // Render the driver list manually to avoid React re-renders
+                const renderDriverList = () => {
+                    if (!listRef.current) return;
+
+                    // Save current scroll position
+                    const currentScrollTop = listRef.current.scrollTop || scrollPositionRef.current;
+
+                    // Create a document fragment for better performance
+                    const fragment = document.createDocumentFragment();
+
+                    // No drivers case
+                    if (stableDriversRef.current.length === 0) {
+                        const noDriversMsg = document.createElement('div');
+                        noDriversMsg.className = 'no-drivers-message';
+                        noDriversMsg.textContent = 'No drivers match your filters';
+                        fragment.appendChild(noDriversMsg);
+
+                        // Clear and update
+                        listRef.current.innerHTML = '';
+                        listRef.current.appendChild(fragment);
+                        return;
+                    }
+
+                    // Create driver items
+                    stableDriversRef.current.forEach(driver => {
+                        const driverItem = document.createElement('div');
+                        driverItem.id = `driver-${driver.id}`;
+                        driverItem.className = `driver-item driver-status-${driver.status.toLowerCase()}`;
+
+                        if (selectedDriverRef.current === driver.id) {
+                            driverItem.classList.add('selected');
+                        }
+
+                        // Add click handler
+                        driverItem.addEventListener('click', () => handleDriverClick(driver));
+
+                        // Create driver icon
+                        const driverIcon = document.createElement('div');
+                        driverIcon.className = 'driver-icon';
+                        driverIcon.style.backgroundImage = `url('/car-icon-${driver.status.toLowerCase()}.svg')`;
+                        driverItem.appendChild(driverIcon);
+
+                        // Create driver info
+                        const driverInfo = document.createElement('div');
+                        driverInfo.className = 'driver-info';
+
+                        // Driver ID
+                        const driverId = document.createElement('div');
+                        driverId.className = 'driver-id';
+                        driverId.textContent = `Taxi #${driver.id}`;
+                        driverInfo.appendChild(driverId);
+
+                        // Driver status
+                        const driverStatus = document.createElement('div');
+                        driverStatus.className = 'driver-status';
+
+                        const statusDot = document.createElement('span');
+                        statusDot.className = 'driver-status-dot';
+                        driverStatus.appendChild(statusDot);
+
+                        driverStatus.appendChild(document.createTextNode(driver.status));
+                        driverInfo.appendChild(driverStatus);
+
+                        // Driver details
+                        const driverDetails = document.createElement('div');
+                        driverDetails.className = 'driver-details';
+
+                        const driverSpeed = document.createElement('span');
+                        driverSpeed.className = 'driver-speed';
+                        driverSpeed.textContent = `${(driver.speed * 111.0 * 3600).toFixed(1)} km/h`;
+                        driverDetails.appendChild(driverSpeed);
+
+                        const driverDistance = document.createElement('span');
+                        driverDistance.className = 'driver-distance';
+                        driverDistance.textContent = `${driver.distance.toFixed(1)} km`;
+                        driverDetails.appendChild(driverDistance);
+
+                        driverInfo.appendChild(driverDetails);
+                        driverItem.appendChild(driverInfo);
+
+                        // Add to fragment
+                        fragment.appendChild(driverItem);
+
+                        // Store reference
+                        listItemsRef.current[driver.id] = driverItem;
+                    });
+
+                    // Add footer if needed
+                    if (filteredDrivers.length > 100) {
+                        const footer = document.createElement('div');
+                        footer.className = 'driver-list-footer';
+                        footer.textContent = `Showing 100 of ${filteredDrivers.length} drivers (sorted by distance)`;
+                        fragment.appendChild(footer);
+                    }
+
+                    // Clear and update in one operation
+                    listRef.current.innerHTML = '';
+                    listRef.current.appendChild(fragment);
+
+                    // Use requestAnimationFrame to restore scroll position after the browser has rendered
+                    requestAnimationFrame(() => {
+                        if (listRef.current) {
+                            listRef.current.scrollTop = currentScrollTop;
+                        }
+                    });
                 };
 
-                return (
-                    <div className="driver-list" ref={listRef}>
-                        <div style={{ height: totalHeight + 'px', position: 'relative' }}>
-                            {visibleDrivers.map((driver, index) => (
-                                <div
-                                    key={driver.id}
-                                    className={`driver-item driver-status-${driver.status.toLowerCase()} ${selectedDriver === driver.id ? 'selected' : ''}`}
-                                    style={{
-                                        position: 'absolute',
-                                        top: getDriverPosition(index) + 'px',
-                                        left: 0,
-                                        right: 0
-                                    }}
-                                    onClick={() => handleDriverClick(driver)}
-                                >
-                                    <div className="driver-icon" style={{ backgroundImage: `url('/car-icon-${driver.status.toLowerCase()}.svg')` }}></div>
-                                    <div className="driver-info">
-                                        <div className="driver-id">Taxi #{driver.id}</div>
-                                        <div className="driver-status">
-                                            <span className="driver-status-dot"></span>
-                                            {driver.status}
-                                        </div>
-                                        <div className="driver-details">
-                                            <span className="driver-speed">{(driver.speed * 111.0 * 3600).toFixed(1)} km/h</span>
-                                            <span className="driver-distance">{driver.distance.toFixed(1)} km</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                );
+                // Initial render
+                React.useEffect(() => {
+                    renderDriverList();
+                }, []);
+
+                // Return an empty div that will be populated manually
+                return <div className="driver-list" ref={listRef}></div>;
             };
 
             return (
@@ -1219,8 +1322,8 @@
                                 </div>
                             </div>
 
-                            {/* Virtualized driver list for better performance */}
-                            <DriverList drivers={filteredDrivers} />
+                            {/* Driver list with manual DOM manipulation for better performance */}
+                            <DriverList />
                         </div>
                     </div>
                     <div
